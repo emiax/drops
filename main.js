@@ -13,6 +13,10 @@
      */
     var simulationProgram = null;
 
+    /**
+     * Time
+     */
+    var t = 0;
 
     /**
      * Try to exctract the webgl context
@@ -93,6 +97,7 @@
             mode = !mode;
             simulate(mode);
             render(mode);
+            tick();
             requestAnimationFrame(renderLoop);
         }
         renderLoop();
@@ -111,9 +116,20 @@
         gl.bindTexture(gl.TEXTURE_2D, simulationTexture(mode));
         gl.uniform1i(simulationProgram.textureUniform, 0);
 
+        gl.uniform1f(simulationProgram.timeUniform, time());
+
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, squareVB.nVertices);
     }
 
+
+    function time() {
+        return t;
+    }
+
+
+    function tick() {
+        t+=0.01;
+    }
 
     /**
      * Render one frame
@@ -254,6 +270,8 @@
         // Attribute & Uniform Locations for simulation
         simulationProgram.squarePositionAttribute = gl.getAttribLocation(simulationProgram, 'aVertexPosition');
         simulationProgram.textureUniform = gl.getUniformLocation(simulationProgram, 'simulation');
+        simulationProgram.timeUniform = gl.getUniformLocation(simulationProgram, 'time');
+
         gl.enableVertexAttribArray(simulationProgram.squarePositionAttribute);
         gl.enableVertexAttribArray(simulationProgram.textureCoordinatesAttribute);
 
