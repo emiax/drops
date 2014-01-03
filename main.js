@@ -3,6 +3,8 @@
     var gl = getContext(canvas);
 
 
+    var loadedTexture = false;
+
     /**
      * GLSL rendering program
      */
@@ -112,9 +114,18 @@
         var squareVB = squareVertexBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, squareVB);
         gl.vertexAttribPointer(simulationProgram.vertexPositionAttribute, squareVB.nDimensions, gl.FLOAT, false, 0, 0);
+
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, simulationTexture(mode));
-        gl.uniform1i(simulationProgram.textureUniform, 0);
+        gl.uniform1i(simulationProgram.simulationUniform, 0);
+        
+        referenceTexture();
+        if (loadedTexture) {
+            gl.activeTexture(gl.TEXTURE1);
+            gl.bindTexture(gl.TEXTURE_2D, referenceTexture());
+            gl.uniform1i(simulationProgram.referenceUniform, 1);
+        }
+
 
         gl.uniform1f(simulationProgram.timeUniform, time());
 
@@ -145,7 +156,7 @@
 
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, simulationTexture(mode));
-        gl.uniform1i(renderingProgram.textureUniform, 0);
+        gl.uniform1i(renderingProgram.simulationUniform, 0);
 
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, squareVB.nVertices);
 
@@ -233,6 +244,30 @@
     }());
 
 
+    var referenceTexture = (function () {
+        var texture = null;
+        return function (id) {
+            if (!texture) {
+                texture = gl.createTexture();
+                texture.image = new Image();
+                texture.image.onload = function () {
+                    loadedTexture = true;
+                    console.log("LOADED!");
+                    gl.bindTexture(gl.TEXTURE_2D, texture);
+                    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+                    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, texture.image);
+                    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+                    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+                    gl.bindTexture(gl.TEXTURE_2D, null);
+                }
+                texture.image.src = "scream.jpg";
+            }
+            return texture;
+        };
+        
+    }());
+
+
     /**
      * Link vertexShader vs and fragmentShader fs to one shader program and return it.
      */
@@ -272,7 +307,8 @@
         
         // Attribute & Uniform Locations for simulation
         simulationProgram.squarePositionAttribute = gl.getAttribLocation(simulationProgram, 'aVertexPosition');
-        simulationProgram.textureUniform = gl.getUniformLocation(simulationProgram, 'simulation');
+        simulationProgram.simulationUniform = gl.getUniformLocation(simulationProgram, 'simulation');
+        simulationProgram.referenceUniform = gl.getUniformLocation(simulationProgram, 'reference');
         simulationProgram.timeUniform = gl.getUniformLocation(simulationProgram, 'time');
 
         gl.enableVertexAttribArray(simulationProgram.squarePositionAttribute);
@@ -280,7 +316,7 @@
 
         // Attribute & Uniform Locations for rendering
         renderingProgram.squarePositionAttribute = gl.getAttribLocation(renderingProgram, 'aVertexPosition');
-        renderingProgram.textureUniform = gl.getUniformLocation(renderingProgram, 'simulation');
+        renderingProgram.simulationUniform = gl.getUniformLocation(renderingProgram, 'simulation');
         gl.enableVertexAttribArray(renderingProgram.squarePositionAttribute);
         gl.enableVertexAttribArray(renderingProgram.textureCoordinatesAttribute);
 

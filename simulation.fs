@@ -1,6 +1,7 @@
 precision mediump float;
 
 uniform sampler2D simulation;
+uniform sampler2D reference;
 uniform float time;
 varying vec2 vTextureCoordinates;
 
@@ -116,13 +117,35 @@ float normalizedNoise(vec3 v) {
   return snoise(v)*0.5 + 0.5;
 }
 
+vec4 normalBlend(vec4 front, vec4 back) {
+  vec3 color = front.rgb*front.a + back.rgb*(1.0 - front.a)*back.a;
+  float alpha = front.a + back.a*(1.0 - front.a);
+  return vec4(color, alpha);
+}
+
+
+vec4 subtractiveBlend(vec4 a, float aRatio, vec4 b, float bRatio) {
+  vec3 pigmentsFromA = aRatio * a.a * a.xyz;
+  vec3 pigmentsFromB = bRatio * b.a * b.xyz;
+  
+  float height = a.a*aRatio + b.a*bRatio;
+  vec3 concentration = (pigmentsFromA + pigmentsFromB) / height;
+  
+  return vec4(concentration, height);
+}
 
 
 void main() {
 
-  vec2 gravity = vec2(0.0, -1.0/1024.0);
+  float pixelSize = 1.0/1024.0;
+  
+
 
   vec2 coord0 = vTextureCoordinates;
+
+  vec2 gravity = vec2(snoise(vec3(coord0*10.0, time))*pixelSize*0.5, -pixelSize);
+
+
   vec2 coord1 = coord0 - gravity;
   vec2 coord2 = coord1 - gravity;
 
@@ -142,32 +165,66 @@ void main() {
   velocity0 = smoothstep(0.05, 1.0, velocity0);
   velocity1 = smoothstep(0.05, 1.0, velocity1);
   velocity2 = smoothstep(0.05, 1.0, velocity2);
+ 
+  sample0 = subtractiveBlend(sample0, (1.0-velocity0), sample1, velocity1);
+  //  sample0 = normalBlend(vec4(1.0 - sample0.xyz, sample0.a*(1.0-velocity0)), vec4(1.0 - sample1.xyz, sample1.a*(1.0-velocity0)));
 
-  float heightFrom0 = (1.0-velocity0)*height0;
+  /*  float heightFrom0 = (1.0-velocity0)*height0;
   float heightFrom1 = velocity1*height1;
   
   vec3 pigmentsFrom0 = heightFrom0 * sample0.xyz;
   vec3 pigmentsFrom1 = heightFrom1 * sample1.xyz;
   
   float height = heightFrom0 + heightFrom1;
-  vec3 pigments = (pigmentsFrom0 + pigmentsFrom1) / height;
+  vec3 pigments = (pigmentsFrom0 + pigmentsFrom1) / height;*/
   
-  sample0 = vec4(pigments, height);
+  //  sample0 = vec4(pigments, height);
 
   sample0.a -= 0.0001;
   sample0.x -= 0.001;
   sample0.y -= 0.001;
   sample0.z -= 0.001;
 
-  //  if (sample0.a > 0.8) {
-  //  sample0.a *= 0.5;
-  // }
   
-  float seed = 1.2*normalizedNoise(vec3(coord0, time*2.0)) * normalizedNoise(vec3(coord0*15.0, time*15.0));
 
-  float cyan = 0.2*(sin(0.003*time) + 1.0);
+  vec4 sampleAA = texture2D(simulation, vec2(coord0.x - pixelSize, coord0.y - pixelSize));
+  vec4 sampleA0 = texture2D(simulation, vec2(coord0.x - pixelSize, coord0.y));
+  vec4 sampleAB = texture2D(simulation, vec2(coord0.x - pixelSize, coord0.y + pixelSize));
+
+  vec4 sample0A = texture2D(simulation, vec2(coord0.x, coord0.y - pixelSize));
+  //  vec4 sample00 = texture2D(simulation, vec2(coord0.x, coord0.y));
+  vec4 sample0B = texture2D(simulation, vec2(coord0.x, coord0.y + pixelSize));
+
+  vec4 sampleBA = texture2D(simulation, vec2(coord0.x + pixelSize, coord0.y - pixelSize));
+  vec4 sampleB0 = texture2D(simulation, vec2(coord0.x + pixelSize, coord0.y));
+  vec4 sampleBB = texture2D(simulation, vec2(coord0.x + pixelSize, coord0.y + pixelSize));
+
+
+  // Surface tension simulation
+  /*vec4 s0 = sample0;
+  
+  s0 = subtractiveBlend(s0, 1.0-smoothstep(0.6, 1.0, sample0.a), sampleAA, smoothstep(0.6, 1.0, sampleAA.a)*0.125);
+  s0 = subtractiveBlend(s0, 1.0-smoothstep(0.6, 1.0, sample0.a), sampleA0, smoothstep(0.6, 1.0, sampleA0.a)*0.125);
+  s0 = subtractiveBlend(s0, 1.0-smoothstep(0.6, 1.0, sample0.a), sampleAB, smoothstep(0.6, 1.0, sampleAB.a)*0.125);
+  s0 = subtractiveBlend(s0, 1.0-smoothstep(0.6, 1.0, sample0.a), sample0A, smoothstep(0.6, 1.0, sample0A.a)*0.125);
+  
+  s0 = subtractiveBlend(s0, 1.0-smoothstep(0.6, 1.0, sample0.a), sample0B, smoothstep(0.6, 1.0, sample0B.a)*0.125);
+  s0 = subtractiveBlend(s0, 1.0-smoothstep(0.6, 1.0, sample0.a), sampleBA, smoothstep(0.6, 1.0, sampleBA.a)*0.125);
+  s0 = subtractiveBlend(s0, 1.0-smoothstep(0.6, 1.0, sample0.a), sampleB0, smoothstep(0.6, 1.0, sampleB0.a)*0.125);
+  s0 = subtractiveBlend(s0, 1.0-smoothstep(0.6, 1.0, sample0.a), sampleBB, smoothstep(0.6, 1.0, sampleBB.a)*0.125);
+  sample0 = s0;*/
+
+  sample0.a *= mix(0.998, 0.4, smoothstep(0.6, 1.0, sample0.a));
+  sample0.xyz *= mix(1.0, 0.998, smoothstep(0.6, 1.0, sample0.a));
+
+  // splash some new color
+  
+  float seed = 1.3*normalizedNoise(vec3(coord0, time*2.0)) * normalizedNoise(vec3(coord0*15.0, time*15.0));
+
+
   float magenta = 0.5*(((1.0 + sin(2.76*time))));
   float yellow = 0.4*(1.0 - ((1.0 + sin(48.2*time))));
+  float cyan = magenta/2.0; // 0.2*(sin(0.003*time) + 1.0);
 
 
   cyan = clamp(cyan, 0.0, 1.0);
@@ -175,11 +232,13 @@ void main() {
   yellow = clamp(yellow, 0.0, 1.0);
 
 
-  vec4 foreground = vec4(cyan, magenta, yellow, clamp(10.0*seed - 9.0, 0.0, 1.0));
+  //  vec4 foreground = vec4(cyan, magenta, yellow, clamp(10.0*seed - 9.0, 0.0, 1.0));
+  vec4 foregroundRGBA = texture2D(reference, coord0);
+  vec4 foreground = vec4(1.0 - foregroundRGBA.xyz, foregroundRGBA.a);
   float saturation = smoothstep(0.9, 1.0, seed);
 
   
-  sample0 += vec4(foreground.xyz * saturation, foreground.a/10.0);
+  sample0 += vec4(foreground.xyz * saturation, clamp(10.0*seed - 9.0, 0.0, 1.0)*foreground.a/10.0);
 
   gl_FragColor = clamp(sample0, 0.0, 1.0);
 }
