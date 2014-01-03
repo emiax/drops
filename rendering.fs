@@ -140,8 +140,8 @@ void main(void) {
   float derX = sampleA0.a - sampleB0.a;
   float derY = sample0A.a - sample0B.a;
 
-  //    if (coord0.x > 0.5) {
-  //   color.a = (sampleAA.a + 2.0*sampleA0.a + sampleAB.a + 2.0*sample0A.a + color.a*18.0 + 2.0*sample0B.a + sampleBA.a + 2.0*sampleB0.a + sampleBB.a)/10.0;
+  //  if (coord0.x > 0.5) {
+  //   color.a = (sampleAA.a + 2.0*sampleA0.a + sampleAB.a + 2.0*sample0A.a + color.a*2.0 + 2.0*sample0B.a + sampleBA.a + 2.0*sampleB0.a + sampleBB.a)/8.0;
   // }
     
 
@@ -155,7 +155,7 @@ void main(void) {
   vec4 backgroundColor = mix(backgroundColor0, backgroundColor1, fractal);
   
   vec3 baseColor = vec3(1.0 - color.x, 1.0 - color.y, 1.0 - color.z);
-  float diffuse = clamp(-derX + derY, 0.0, 1.0);
+  float diffuse = clamp(-derX + derY, -1.0, 1.0);
   //  float shadow = clamp(-derX - derY, 0.0, 1.0);
 
   //  baseColor.xyz += 10.0*diffuse;
@@ -163,14 +163,14 @@ void main(void) {
 
   
   
-  gl_FragColor = normalBlend(vec4(baseColor + diffuse*2.0, color.a), backgroundColor);
+  gl_FragColor = normalBlend(vec4(baseColor + diffuse*5.0, color.a), backgroundColor);
   
   //  gl_FragColor = backgroundColor;
 
   //  gl_FragColor
   
-  // gl_FragColor = vec4(color.a, color.a, color.a, 1.0);
-  //  gl_FragColor = vec4(10.0*derX, 10.0*derY, 0.0, 1.0);
+  //  gl_FragColor = vec4(color.a, color.a, color.a, 1.0);
+  //    gl_FragColor = vec4(10.0*derX, 10.0*derY, 0.0, 1.0);
 
 }
 

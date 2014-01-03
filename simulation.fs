@@ -214,15 +214,15 @@ void main() {
   s0 = subtractiveBlend(s0, 1.0-smoothstep(0.6, 1.0, sample0.a), sampleBB, smoothstep(0.6, 1.0, sampleBB.a)*0.125);
   sample0 = s0;*/
 
-  sample0.a *= mix(0.998, 0.4, smoothstep(0.6, 1.0, sample0.a));
-  sample0.xyz *= mix(1.0, 0.998, smoothstep(0.6, 1.0, sample0.a));
+  sample0.a *= mix(0.998, 0.4, smoothstep(0.5, 1.0, sample0.a));
+  sample0.xyz *= mix(1.0, 0.99, smoothstep(0.2, 1.0, sample0.a));
 
   // splash some new color
   
-  float seed = 1.3*normalizedNoise(vec3(coord0, time*2.0)) * normalizedNoise(vec3(coord0*15.0, time*15.0));
+  float seed = 1.3*normalizedNoise(vec3(coord0, time*2.0)) * normalizedNoise(vec3(coord0*20.0*(sin(time) + 1.4), time*15.0));
 
 
-  float magenta = 0.5*(((1.0 + sin(2.76*time))));
+  /*  float magenta = 0.5*(((1.0 + sin(2.76*time))));
   float yellow = 0.4*(1.0 - ((1.0 + sin(48.2*time))));
   float cyan = magenta/2.0; // 0.2*(sin(0.003*time) + 1.0);
 
@@ -230,10 +230,12 @@ void main() {
   cyan = clamp(cyan, 0.0, 1.0);
   magenta = clamp(magenta, 0.0, 1.0);
   yellow = clamp(yellow, 0.0, 1.0);
-
+  */
 
   //  vec4 foreground = vec4(cyan, magenta, yellow, clamp(10.0*seed - 9.0, 0.0, 1.0));
-  vec4 foregroundRGBA = texture2D(reference, coord0);
+  vec4 foregroundRGBA = texture2D(reference, vec2(coord0.x + 0.1*snoise(vec3(coord0, time)), coord0.y + 0.1*snoise(vec3(coord0, time))));
+  foregroundRGBA.r += normalizedNoise(vec3(time*6.0, coord0));
+
   vec4 foreground = vec4(1.0 - foregroundRGBA.xyz, foregroundRGBA.a);
   float saturation = smoothstep(0.9, 1.0, seed);
 
