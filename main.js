@@ -3,7 +3,7 @@
     var gl = getContext(canvas);
 
 
-    var loadedTexture = false;
+    var textures = {};
 
     /**
      * GLSL rendering program
@@ -90,6 +90,54 @@
     }
 
 
+    /*
+     * Get texture
+     */
+    function getTexture(url, cb) {
+        var texture = gl.createTexture();
+        texture.image = new Image();
+        texture.image.onload = function () {
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, texture.image);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.bindTexture(gl.TEXTURE_2D, null);
+            console.log(texture);
+            cb(texture);
+        }
+        texture.image.src = url;
+
+    }
+
+
+    /**
+     * Get multiple shaders and invoke cb(id->texture)
+     * Spec is a map id->imageUrl
+     */
+    function getTextures(spec, cb) {
+        var textures = {};
+
+        function recieveTexture(id, texture) {
+            textures[id] = texture;
+            var done = true;
+            Object.keys(spec).forEach(function (id) {
+                if (!textures[id]) {
+                    done = false;
+                }
+            });
+            if (done) cb(textures);
+        }
+
+        Object.keys(spec).forEach(function (id) {
+            var url = spec[id];
+            getTexture(url, function (texture) {
+                recieveTexture(id, texture);
+            });
+        });
+    }
+
+
     /**
      * Start rendering
      */
@@ -118,16 +166,32 @@
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, simulationTexture(mode));
         gl.uniform1i(simulationProgram.simulationUniform, 0);
-        
-        referenceTexture();
-        if (loadedTexture) {
-            gl.activeTexture(gl.TEXTURE1);
-            gl.bindTexture(gl.TEXTURE_2D, referenceTexture());
-            gl.uniform1i(simulationProgram.referenceUniform, 1);
-        }
 
+        gl.activeTexture(gl.TEXTURE1);
+        if (time()%100 < 50) {
+            gl.bindTexture(gl.TEXTURE_2D, textures['reference']);
+        } else {
+            gl.bindTexture(gl.TEXTURE_2D, textures['text']);
+        }
+        gl.uniform1i(simulationProgram.referenceUniform, 1);
+
+
+        var scatter = 0.1;//Math.sin(time());
+
+        var size = Math.random()/20;//Math.abs(0.2 - time()/100.0);//Math.abs(Math.sin(time()*0.4)/10) + 0.2;
+
+        var position = {
+            x: Math.random(),
+            y: Math.random()
+        }
+        
+        var amount = (Math.sin(time()*10)+1) * 0.6; //t % 0.5 < 0.2 ? 0.07 : 0;
 
         gl.uniform1f(simulationProgram.timeUniform, time());
+        gl.uniform1f(simulationProgram.scatterUniform, scatter);
+        gl.uniform1f(simulationProgram.sizeUniform, size);
+        gl.uniform2f(simulationProgram.positionUniform, position.x, position.y);
+        gl.uniform1f(simulationProgram.amountUniform, amount);
 
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, squareVB.nVertices);
     }
@@ -220,7 +284,6 @@
         });
     }());
 
-
     /**
      * Create a simulation texture with id if it does not yet exist.
      * Return it.
@@ -243,31 +306,6 @@
         })
     }());
 
-
-    var referenceTexture = (function () {
-        var texture = null;
-        return function (id) {
-            if (!texture) {
-                texture = gl.createTexture();
-                texture.image = new Image();
-                texture.image.onload = function () {
-                    loadedTexture = true;
-                    console.log("LOADED!");
-                    gl.bindTexture(gl.TEXTURE_2D, texture);
-                    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-                    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, texture.image);
-                    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-                    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-                    gl.bindTexture(gl.TEXTURE_2D, null);
-                }
-                texture.image.src = "landscape.jpg";
-            }
-            return texture;
-        };
-        
-    }());
-
-
     /**
      * Link vertexShader vs and fragmentShader fs to one shader program and return it.
      */
@@ -288,13 +326,14 @@
     /**
      * Initialize scene.
      */
-    function init(shaders) {
+    function init(shaders, tex) {
         var vs = shaders['vs'];
         var simulation = shaders['simulation'];
         var rendering = shaders['rendering'];
 
         simulationProgram = createShaderProgram(vs, simulation);
         renderingProgram = createShaderProgram(vs, rendering);
+        textures = tex;
 
         var squareVB = squareVertexBuffer();
 
@@ -304,12 +343,17 @@
         gl.clearColor(0.0, 0.0, 0.0, 0.0);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
         gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-        
+
         // Attribute & Uniform Locations for simulation
         simulationProgram.squarePositionAttribute = gl.getAttribLocation(simulationProgram, 'aVertexPosition');
         simulationProgram.simulationUniform = gl.getUniformLocation(simulationProgram, 'simulation');
         simulationProgram.referenceUniform = gl.getUniformLocation(simulationProgram, 'reference');
         simulationProgram.timeUniform = gl.getUniformLocation(simulationProgram, 'time');
+
+        simulationProgram.scatterUniform = gl.getUniformLocation(simulationProgram, 'scatter');
+        simulationProgram.sizeUniform = gl.getUniformLocation(simulationProgram, 'size');
+        simulationProgram.positionUniform = gl.getUniformLocation(simulationProgram, 'position');
+        simulationProgram.amountUniform = gl.getUniformLocation(simulationProgram, 'amount');
 
         gl.enableVertexAttribArray(simulationProgram.squarePositionAttribute);
         gl.enableVertexAttribArray(simulationProgram.textureCoordinatesAttribute);
@@ -328,5 +372,12 @@
         vs: 'vertexShader.vs',
         simulation: 'simulation.fs',
         rendering: 'rendering.fs'
-    }, init);
+    }, function (shaders) {
+        getTextures({
+            reference: 'landscape.jpg',
+            text: 'scream.jpg'
+        }, function (textures) {
+            init(shaders, textures);
+        })
+    });
 })();
