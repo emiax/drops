@@ -139,9 +139,9 @@ void main() {
   float velocity1 = height1*(0.6 + normalizedNoise(vec3(coord1*10.0, time))*0.4);
   float velocity2 = height2*(0.6 + normalizedNoise(vec3(coord2*10.0, time))*0.4);
   
-  velocity0 = smoothstep(0.05, 0.5, velocity0);
-  velocity1 = smoothstep(0.05, 0.5, velocity1);
-  velocity2 = smoothstep(0.05, 0.5, velocity2);
+  velocity0 = smoothstep(0.05, 1.0, velocity0);
+  velocity1 = smoothstep(0.05, 1.0, velocity1);
+  velocity2 = smoothstep(0.05, 1.0, velocity2);
 
   float heightFrom0 = (1.0-velocity0)*height0;
   float heightFrom1 = velocity1*height1;
@@ -154,16 +154,32 @@ void main() {
   
   sample0 = vec4(pigments, height);
 
-  sample0.a *= 0.999;
+  sample0.a -= 0.0001;
+  sample0.x -= 0.001;
+  sample0.y -= 0.001;
+  sample0.z -= 0.001;
+
+  //  if (sample0.a > 0.8) {
+  //  sample0.a *= 0.5;
+  // }
+  
+  float seed = 1.2*normalizedNoise(vec3(coord0, time*2.0)) * normalizedNoise(vec3(coord0*15.0, time*15.0));
+
+  float cyan = 0.2*(sin(0.003*time) + 1.0);
+  float magenta = 0.5*(((1.0 + sin(2.76*time))));
+  float yellow = 0.4*(1.0 - ((1.0 + sin(48.2*time))));
+
+
+  cyan = clamp(cyan, 0.0, 1.0);
+  magenta = clamp(magenta, 0.0, 1.0);
+  yellow = clamp(yellow, 0.0, 1.0);
+
+
+  vec4 foreground = vec4(cyan, magenta, yellow, clamp(10.0*seed - 9.0, 0.0, 1.0));
+  float saturation = smoothstep(0.9, 1.0, seed);
 
   
-  float seed = normalizedNoise(vec3(coord0*15.0, time));
+  sample0 += vec4(foreground.xyz * saturation, foreground.a/10.0);
 
-    vec4 foreground = vec4(clamp(0.2*(sin(1.2*time) + 1.0), 0.0, 1.0), clamp(0.8*(1.0 - ((1.0 + sin(1.2*time)))), 0.0, 1.0), 0.2, clamp(10.0*seed - 9.0, 0.0, 1.0));
-  float saturation = smoothstep(0.9, 0.95, seed);
-
-  
-  sample0 += vec4(foreground.xyz * saturation, foreground.a/100.0);
-
-  gl_FragColor = sample0;
+  gl_FragColor = clamp(sample0, 0.0, 1.0);
 }

@@ -266,7 +266,10 @@
         console.log("all shaders compiled");
 
         gl.viewport(0, 0, canvas.width, canvas.height);
-
+        gl.clearColor(0.0, 0.0, 0.0, 0.0);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+        
         // Attribute & Uniform Locations for simulation
         simulationProgram.squarePositionAttribute = gl.getAttribLocation(simulationProgram, 'aVertexPosition');
         simulationProgram.textureUniform = gl.getUniformLocation(simulationProgram, 'simulation');
