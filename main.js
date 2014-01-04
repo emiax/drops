@@ -1,6 +1,8 @@
 (function () {
     var canvas = document.getElementById('canvas');
     var gl = getContext(canvas);
+    var stats = new Stats();
+
 
 
     var textures = {};
@@ -14,6 +16,18 @@
      * GLSL simulation program
      */
     var simulationProgram = null;
+
+
+    /**
+     * Number of seeds. (splat points)
+     */
+    var nSeeds = 8;
+
+
+    /**
+     * Simulation Env
+     */
+    var simulationEnv = null;
 
     /**
      * Time
@@ -144,55 +158,78 @@
     function startRendering() {
         var mode = 0;
         function renderLoop() {
+            stats.begin();
             mode = !mode;
-            simulate(mode);
+            simulate(mode, simulationEnv);
             render(mode);
             tick();
+            stats.end();
             requestAnimationFrame(renderLoop);
         }
         renderLoop();
     }
 
 
-    function simulate(mode) {
-        gl.bindFramebuffer(gl.FRAMEBUFFER, simulationBuffer(!mode));
+    function simulate(mode, simulationEnv) {
+        // Prepare for rendering to back simulation buffer.
+        var backBuffer = simulationBuffer(!mode);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, backBuffer);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         gl.useProgram(simulationProgram);
 
+        // Vertex buffer.
         var squareVB = squareVertexBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, squareVB);
         gl.vertexAttribPointer(simulationProgram.vertexPositionAttribute, squareVB.nDimensions, gl.FLOAT, false, 0, 0);
 
+        // Send in the front buffer (old simulation step)
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, simulationTexture(mode));
         gl.uniform1i(simulationProgram.simulationUniform, 0);
 
         gl.activeTexture(gl.TEXTURE1);
-        if (time()%100 < 50) {
-            gl.bindTexture(gl.TEXTURE_2D, textures['reference']);
-        } else {
-            gl.bindTexture(gl.TEXTURE_2D, textures['text']);
-        }
+        gl.bindTexture(gl.TEXTURE_2D, textures['reference']);
         gl.uniform1i(simulationProgram.referenceUniform, 1);
 
+        var seeds = simulationEnv.emit();
 
-        var scatter = 0.1;//Math.sin(time());
+        var scatter = new Float32Array(nSeeds);
+        var size = new Float32Array(nSeeds);
+        var position = new Float32Array(nSeeds*2);
+        var amount = new Float32Array(nSeeds);
 
-        var size = Math.random()/20;//Math.abs(0.2 - time()/100.0);//Math.abs(Math.sin(time()*0.4)/10) + 0.2;
-
-        var position = {
-            x: Math.random(),
-            y: Math.random()
-        }
+        seeds.forEach(function (v, k) {
+            v = v || {};
+            scatter[k] = v.scatter || 0;
+            size[k] = v.size || 0;
+            if (v.position) {
+                position[k*2] = v.position.x;
+                position[k*2+1] = v.position.y;
+            } else {
+                position[k*2] = 0;
+                position[k*2 + 1] = 0;
+            }
+            amount[k] = v.amount || 0;
+        });
         
-        var amount = (Math.sin(time()*10)+1) * 0.6; //t % 0.5 < 0.2 ? 0.07 : 0;
+        gl.uniform1fv(simulationProgram.scatterUniform, scatter);
+        gl.uniform1fv(simulationProgram.sizeUniform, size);
+        gl.uniform2fv(simulationProgram.positionUniform, position);
+        gl.uniform1fv(simulationProgram.amountUniform, amount);
 
+/*        var scatter = Math.sin(time()*10)*15 + 20;
+        var size = 0.1;//Math.abs(0.2 - time()/100.0);//Math.abs(Math.sin(time()*0.4)/10) + 0.2;
+        var position = {
+            x: (Math.sin(time()*13) + 1.0)/2,
+            y: (Math.cos(time()*17) + 1.0)/2
+        }
+        var amount = (time() % 0.7 < 0.10) ? size*3.0*Math.random() : 0;
+        var decay = time() % 8.0 < 0.01 ? 1/255 : 0;*/
+        var decay = simulationEnv.decay();
+
+        gl.uniform1f(simulationProgram.decayUniform, decay);
         gl.uniform1f(simulationProgram.timeUniform, time());
-        gl.uniform1f(simulationProgram.scatterUniform, scatter);
-        gl.uniform1f(simulationProgram.sizeUniform, size);
-        gl.uniform2f(simulationProgram.positionUniform, position.x, position.y);
-        gl.uniform1f(simulationProgram.amountUniform, amount);
-
+        
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, squareVB.nVertices);
     }
 
@@ -210,18 +247,30 @@
      * Render one frame
      */
     function render(mode) {
+        // Prepare for rendering.
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         gl.useProgram(renderingProgram);
 
+        // Vertex buffer.
         var squareVB = squareVertexBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, squareVB);
         gl.vertexAttribPointer(renderingProgram.vertexPositionAttribute, squareVB.nDimensions, gl.FLOAT, false, 0, 0);
 
+        // Simuulation texture.
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, simulationTexture(mode));
         gl.uniform1i(renderingProgram.simulationUniform, 0);
 
+        // Background texture.
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, textures['background']);
+        gl.uniform1i(renderingProgram.backgroundUniform, 1);
+        
+        // Rendering needs time uniform.
+        gl.uniform1f(renderingProgram.timeUniform, time());
+        
+        // Now render!
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, squareVB.nVertices);
 
     }
@@ -327,9 +376,23 @@
      * Initialize scene.
      */
     function init(shaders, tex) {
+        //set up stats
+//        stats.setMode(1); // 0: fps, 1: ms
+        
+        // Align top-left
+        stats.domElement.style.position = 'absolute';
+        stats.domElement.style.left = '0px';
+        stats.domElement.style.top = '0px';
+        document.body.appendChild( stats.domElement );
+
+        // shasders
         var vs = shaders['vs'];
         var simulation = shaders['simulation'];
         var rendering = shaders['rendering'];
+        
+        simulationEnv = new SimulationEnv(nSeeds);
+        var vj = new VJ(simulationEnv);
+        vj.start();
 
         simulationProgram = createShaderProgram(vs, simulation);
         renderingProgram = createShaderProgram(vs, rendering);
@@ -349,6 +412,7 @@
         simulationProgram.simulationUniform = gl.getUniformLocation(simulationProgram, 'simulation');
         simulationProgram.referenceUniform = gl.getUniformLocation(simulationProgram, 'reference');
         simulationProgram.timeUniform = gl.getUniformLocation(simulationProgram, 'time');
+        simulationProgram.decayUniform = gl.getUniformLocation(simulationProgram, 'decay');
 
         simulationProgram.scatterUniform = gl.getUniformLocation(simulationProgram, 'scatter');
         simulationProgram.sizeUniform = gl.getUniformLocation(simulationProgram, 'size');
@@ -360,7 +424,9 @@
 
         // Attribute & Uniform Locations for rendering
         renderingProgram.squarePositionAttribute = gl.getAttribLocation(renderingProgram, 'aVertexPosition');
+        renderingProgram.timeUniform = gl.getUniformLocation(renderingProgram, 'time');
         renderingProgram.simulationUniform = gl.getUniformLocation(renderingProgram, 'simulation');
+        renderingProgram.backgroundUniform = gl.getUniformLocation(renderingProgram, 'background');
         gl.enableVertexAttribArray(renderingProgram.squarePositionAttribute);
         gl.enableVertexAttribArray(renderingProgram.textureCoordinatesAttribute);
 
@@ -374,7 +440,8 @@
         rendering: 'rendering.fs'
     }, function (shaders) {
         getTextures({
-            reference: 'landscape.jpg',
+            reference: 'scream.jpg',
+            background: 'scream.jpg',
             text: 'scream.jpg'
         }, function (textures) {
             init(shaders, textures);

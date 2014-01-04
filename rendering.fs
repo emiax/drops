@@ -1,7 +1,12 @@
 precision mediump float;
 
+uniform float time;
 uniform sampler2D simulation;
 varying vec2 vTextureCoordinates;
+
+
+uniform sampler2D background;
+
 //////////////////////////////////////////////////// SIMPLEX NOISE
 //
 // Description : Array and textureless GLSL 2D/3D/4D simplex 
@@ -148,31 +153,50 @@ void main(void) {
   float derY = sample0A.a - sample0B.a;
 
   //  if (coord0.x > 0.5) {
-  //   color.a = (sampleAA.a + 2.0*sampleA0.a + sampleAB.a + 2.0*sample0A.a + color.a*2.0 + 2.0*sample0B.a + sampleBA.a + 2.0*sampleB0.a + sampleBB.a)/8.0;
+  //     color.a = (sampleAA.a + 2.0*sampleA0.a + sampleAB.a + 2.0*sample0A.a + color.a*2.0 + 2.0*sample0B.a + sampleBA.a + 2.0*sampleB0.a + sampleBB.a)/8.0;
   // }
     
 
-  vec3 backgroundColor0 = vec3(0.04, 0.04, 0.04);
-  vec3 backgroundColor1 = vec3(0.03, 0.03, 0.03);
 
+  vec2 backgroundCoord = coord0 - 0.2*vec2(derX, derY);
+
+  
   float fractal =  1.0*snoise(vec3(coord0*5.0, 0.42));
   fractal += 0.5*snoise(vec3(coord0*10.0, 0.28));
   fractal += 0.25*snoise(vec3(coord0*20.0, 3.28));
 
-  vec4 backgroundColor = vec4(mix(backgroundColor0, backgroundColor1, fractal), 1.0);
+  vec3 backgroundColor0 = vec3(0.04, 0.04, 0.04);
+  vec3 backgroundColor1 = vec3(0.03, 0.03, 0.03);
+
+  vec3 backgroundColor2 = vec3(0.98, 0.98, 0.98);
+  vec3 backgroundColor3 = vec3(0.93, 0.93, 0.93);
+
+  vec4 backgroundColorA = vec4(mix(backgroundColor0, backgroundColor1, fractal), 1.0);
+  vec4 backgroundColorB = vec4(mix(backgroundColor2, backgroundColor3, fractal), 1.0);
   
+  
+  vec4 backgroundColor = mix(backgroundColorA, backgroundColorB, smoothstep(-0.2, 0.2, sin(backgroundCoord.x*100.0)));
+  
+
+  // vec4 backgroundColor = texture2D(background, backgroundCoord);
+  
+
+
   float diffuse = clamp(derX - derY, -1.0, 1.0);
   //  float shadow = clamp(-derX - derY, 0.0, 1.0);
 
   //  baseColor.xyz += 10.0*diffuse;
-
+  //  enhancedColor.a *= 2.5;//snoise(vec3(coord0*5.0, time*0.1));
+  
   gl_FragColor = normalBlend(enhancedColor, backgroundColor);
-  gl_FragColor.rgb -= 2.0*diffuse;
+  //  gl_FragColor = backgroundColor;
+  gl_FragColor.rgb -= 1.0*diffuse;
   
   //  gl_FragColor = backgroundColor;
 
   //  gl_FragColor
-  /*  if (coord0.x > 0.5) {
+  /*
+  if (coord0.x > 0.5) {
     if (coord0.y > 0.66) {
       // top
       gl_FragColor = vec4(color.a, color.a, color.a, 1.0);
@@ -181,9 +205,10 @@ void main(void) {
       gl_FragColor = vec4(0.5 + 10.0*derX, 0.5 + 10.0*derY, 1.0, 1.0);
     } else {
       // bottom
-      gl_FragColor = vec4(color.rgb, 1.0);
+      gl_FragColor = vec4(color.rgb, step(0.001, color.a));
     }
     }*/
+    
   //   
   //      
 
